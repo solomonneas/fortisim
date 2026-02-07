@@ -1,16 +1,16 @@
 import { useState, useMemo } from 'react';
-import { Network, Shield } from 'lucide-react';
+import { Network } from 'lucide-react';
 import { mockZones, mockInterfaces, mockDeviceInfo } from '../data/mockInterfaces';
 import { mockPolicies } from '../data/mockPolicies';
 import type { FirewallPolicy } from '../types';
 
 /** Zone positions around the central firewall (SVG coordinates) */
-const zoneLayout: Record<string, { x: number; y: number; angle: number }> = {
-  WAN: { x: 400, y: 60, angle: -90 },
-  LAN: { x: 120, y: 240, angle: 180 },
-  DMZ: { x: 680, y: 240, angle: 0 },
-  Guest: { x: 200, y: 440, angle: 135 },
-  VPN: { x: 600, y: 440, angle: 45 },
+const zoneLayout: Record<string, { x: number; y: number }> = {
+  WAN: { x: 400, y: 60 },
+  LAN: { x: 120, y: 240 },
+  DMZ: { x: 680, y: 240 },
+  Guest: { x: 200, y: 440 },
+  VPN: { x: 600, y: 440 },
 };
 
 /** Derive inter-zone traffic flows from policy table */
@@ -28,7 +28,6 @@ function deriveZoneFlows(policies: FirewallPolicy[]): ZoneFlow[] {
   for (const policy of policies) {
     if (policy.policyid === 0 || policy.status === 'disable') continue;
 
-    // Resolve source/dest zones
     for (const srcIntf of policy.srcintf) {
       const srcIface = mockInterfaces.find((i) => i.name === srcIntf.name);
       const srcZone = srcIface?.zone || srcIntf.name;
@@ -87,11 +86,11 @@ export function TopologyPage() {
       <div className="grid grid-cols-[1fr_280px] gap-4">
         {/* SVG Topology Diagram */}
         <div className="bg-surface rounded-lg border border-border-subtle p-2 overflow-hidden">
-          <svg viewBox="0 0 800 520" className="w-full h-auto">
+          <svg viewBox="0 0 800 520" className="w-full h-auto" role="img" aria-label="Network zone topology diagram">
             {/* Background grid */}
             <defs>
               <pattern
-                id="grid"
+                id="topo-grid"
                 width="40"
                 height="40"
                 patternUnits="userSpaceOnUse"
@@ -136,9 +135,14 @@ export function TopologyPage() {
               >
                 <path d="M0,0 L10,3 L0,6" fill="#f59e0b" opacity="0.7" />
               </marker>
+              {/* Glow filter for hovered items */}
+              <filter id="glow-cyan">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
             </defs>
             <rect width="800" height="520" fill="#0a0e17" />
-            <rect width="800" height="520" fill="url(#grid)" />
+            <rect width="800" height="520" fill="url(#topo-grid)" />
 
             {/* Zone-to-zone flow arrows */}
             {flows.map((flow) => {
@@ -195,21 +199,42 @@ export function TopologyPage() {
                     strokeWidth={isHovered ? 2.5 : 1.5}
                     opacity={isHovered ? 0.9 : 0.4}
                     markerEnd={`url(#${markerId})`}
-                    className="transition-all"
                   />
-                  {/* Service label on line */}
+                  {/* Invisible wider hitbox for easier hovering */}
+                  <line
+                    x1={x1 + shortDx}
+                    y1={y1 + shortDy}
+                    x2={x2 - shortDx}
+                    y2={y2 - shortDy}
+                    stroke="transparent"
+                    strokeWidth="12"
+                  />
+                  {/* Service label on line when hovered */}
                   {isHovered && (
-                    <text
-                      x={(x1 + x2) / 2}
-                      y={(y1 + y2) / 2 - 8}
-                      textAnchor="middle"
-                      fill={color}
-                      fontSize="9"
-                      fontFamily="monospace"
-                    >
-                      {flow.services.slice(0, 3).join(', ')}
-                      {flow.services.length > 3 && '...'}
-                    </text>
+                    <>
+                      <rect
+                        x={(x1 + x2) / 2 - 50}
+                        y={(y1 + y2) / 2 - 18}
+                        width="100"
+                        height="14"
+                        rx="3"
+                        fill="#111827"
+                        stroke={color}
+                        strokeWidth="0.5"
+                        opacity="0.95"
+                      />
+                      <text
+                        x={(x1 + x2) / 2}
+                        y={(y1 + y2) / 2 - 8}
+                        textAnchor="middle"
+                        fill={color}
+                        fontSize="9"
+                        fontFamily="monospace"
+                      >
+                        {flow.services.slice(0, 3).join(', ')}
+                        {flow.services.length > 3 ? '…' : ''}
+                      </text>
+                    </>
                   )}
                 </g>
               );
@@ -227,23 +252,13 @@ export function TopologyPage() {
                 stroke="#06b6d4"
                 strokeWidth={1.5}
               />
-              <Shield
-                x={cx - 8}
-                y={cy - 18}
-                width={16}
-                height={16}
-                className="text-cyan"
+              {/* Shield icon as pure SVG path */}
+              <path
+                d={`M${cx - 6} ${cy - 16} L${cx} ${cy - 22} L${cx + 6} ${cy - 16} V${cy - 8} C${cx + 6} ${cy - 4} ${cx} ${cy - 2} ${cx} ${cy - 2} C${cx} ${cy - 2} ${cx - 6} ${cy - 4} ${cx - 6} ${cy - 8}Z`}
+                fill="none"
+                stroke="#06b6d4"
+                strokeWidth="1.2"
               />
-              {/* Manually render shield icon text since SVG components don't work in SVG */}
-              <text
-                x={cx}
-                y={cy - 6}
-                textAnchor="middle"
-                fill="#06b6d4"
-                fontSize="14"
-              >
-                🛡
-              </text>
               <text
                 x={cx}
                 y={cy + 12}
@@ -276,11 +291,11 @@ export function TopologyPage() {
               const policyCount = mockPolicies.filter(
                 (p) =>
                   p.policyid !== 0 &&
-                  (p.srcintf.some(
-                    (si) => ifaces.some((iface) => iface.name === si.name)
+                  (p.srcintf.some((si) =>
+                    ifaces.some((iface) => iface.name === si.name)
                   ) ||
-                    p.dstintf.some(
-                      (di) => ifaces.some((iface) => iface.name === di.name)
+                    p.dstintf.some((di) =>
+                      ifaces.some((iface) => iface.name === di.name)
                     ))
               ).length;
 
@@ -353,42 +368,7 @@ export function TopologyPage() {
           </h2>
 
           {hoveredFlow ? (
-            <div className="space-y-2">
-              <div
-                className={`text-[10px] font-bold px-2 py-1 rounded ${
-                  hoveredFlow.action === 'accept'
-                    ? 'bg-green/10 text-green'
-                    : hoveredFlow.action === 'deny'
-                    ? 'bg-red/10 text-red'
-                    : 'bg-amber/10 text-amber'
-                }`}
-              >
-                {hoveredFlow.action.toUpperCase()}
-              </div>
-              <div className="text-[10px] text-text-muted">Services:</div>
-              <div className="flex flex-wrap gap-1">
-                {hoveredFlow.services.map((s) => (
-                  <span
-                    key={s}
-                    className="text-[10px] bg-card px-1.5 py-0.5 rounded text-amber/80 border border-amber/10"
-                  >
-                    {s}
-                  </span>
-                ))}
-              </div>
-              <div className="text-[10px] text-text-muted mt-2">Policies:</div>
-              <div className="space-y-1">
-                {hoveredFlow.policies.map((p) => (
-                  <div
-                    key={p.policyid}
-                    className="text-[10px] bg-card rounded px-2 py-1 border border-border-subtle"
-                  >
-                    <span className="text-text-secondary">#{p.policyid}</span>{' '}
-                    <span className="text-text">{p.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <FlowDetail flow={hoveredFlow} />
           ) : selectedZone ? (
             <ZoneDetail zoneName={selectedZone} />
           ) : (
@@ -396,12 +376,12 @@ export function TopologyPage() {
               {flows.map((flow) => (
                 <div
                   key={`${flow.from}-${flow.to}`}
-                  className="flex items-center gap-2 text-[10px] bg-card/50 rounded px-2 py-1 border border-border-subtle"
+                  className="flex items-center gap-2 text-[10px] bg-card/50 rounded px-2 py-1.5 border border-border-subtle hover:bg-card transition-colors cursor-pointer"
                   onMouseEnter={() => setHoveredFlow(flow)}
                   onMouseLeave={() => setHoveredFlow(null)}
                 >
                   <span className="text-text-secondary">
-                    {flow.from}→{flow.to}
+                    {flow.from} → {flow.to}
                   </span>
                   <span
                     className={`ml-auto font-bold ${
@@ -419,6 +399,11 @@ export function TopologyPage() {
                   </span>
                 </div>
               ))}
+              {flows.length === 0 && (
+                <div className="text-[11px] text-text-muted text-center py-4">
+                  No inter-zone flows detected.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -427,6 +412,58 @@ export function TopologyPage() {
   );
 }
 
+/** Flow detail when hovering over an arrow */
+function FlowDetail({ flow }: { flow: ZoneFlow }) {
+  return (
+    <div className="space-y-2">
+      <div
+        className={`text-[10px] font-bold px-2 py-1 rounded ${
+          flow.action === 'accept'
+            ? 'bg-green/10 text-green'
+            : flow.action === 'deny'
+            ? 'bg-red/10 text-red'
+            : 'bg-amber/10 text-amber'
+        }`}
+      >
+        {flow.action.toUpperCase()}
+      </div>
+      <div className="text-[10px] text-text-muted">Services:</div>
+      <div className="flex flex-wrap gap-1">
+        {flow.services.map((s) => (
+          <span
+            key={s}
+            className="text-[10px] bg-card px-1.5 py-0.5 rounded text-amber/80 border border-amber/10"
+          >
+            {s}
+          </span>
+        ))}
+      </div>
+      <div className="text-[10px] text-text-muted mt-2">Policies:</div>
+      <div className="space-y-1">
+        {flow.policies.map((p) => (
+          <div
+            key={p.policyid}
+            className="text-[10px] bg-card rounded px-2 py-1 border border-border-subtle flex items-center justify-between"
+          >
+            <span>
+              <span className="text-text-muted">#{p.policyid}</span>{' '}
+              <span className="text-text">{p.name}</span>
+            </span>
+            <span
+              className={`font-bold ${
+                p.action === 'accept' ? 'text-green' : 'text-red'
+              }`}
+            >
+              {p.action}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Zone detail when clicking a zone card */
 function ZoneDetail({ zoneName }: { zoneName: string }) {
   const zone = mockZones.find((z) => z.name === zoneName);
   const ifaces = mockInterfaces.filter((i) => i.zone === zoneName);
@@ -455,14 +492,14 @@ function ZoneDetail({ zoneName }: { zoneName: string }) {
             <div className="flex items-center justify-between">
               <span className="text-text font-medium">{i.name}</span>
               <span
-                className={`${
-                  i.status === 'up' ? 'text-green' : 'text-red'
-                }`}
+                className={i.status === 'up' ? 'text-green' : 'text-red'}
               >
                 {i.status}
               </span>
             </div>
-            <div className="text-text-muted">{i.ip}</div>
+            <div className="text-text-muted">
+              {i.ip} · {i.speed} · {i.alias}
+            </div>
           </div>
         ))}
       </div>

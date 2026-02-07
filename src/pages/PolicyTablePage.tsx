@@ -532,7 +532,7 @@ function InterfaceBadges({ items }: { items: { name: string }[] }) {
       {items.map((i) => (
         <span
           key={i.name}
-          className="bg-cyan/8 text-cyan/80 px-1 py-0 rounded text-[10px] border border-cyan/10"
+          className="bg-cyan/10 text-cyan/80 px-1 py-0 rounded text-[10px] border border-cyan/10"
         >
           {i.name}
         </span>
