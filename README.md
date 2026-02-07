@@ -19,7 +19,7 @@ Visualize, analyze, and simulate FortiGate firewall policies — entirely in the
 
 <br />
 
-[Live Demo](#) · [Features](#-features) · [Quick Start](#-quick-start) · [How It Works](#-how-it-works) · [Architecture](#-architecture)
+[Features](#-features) · [Quick Start](#-quick-start) · [How It Works](#-how-it-works) · [Architecture](#-architecture)
 
 </div>
 
@@ -65,7 +65,7 @@ npm run preview
 
 FortiSim is a **frontend-only** single-page application — no backend required. All firewall data is provided via realistic mock data that mirrors the FortiOS REST API response format.
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                        Browser (SPA)                        │
 ├─────────────────────────────────────────────────────────────┤
@@ -85,7 +85,7 @@ FortiSim is a **frontend-only** single-page application — no backend required.
 
 ## 📁 Project Structure
 
-```
+```text
 fortisim/
 ├── public/
 │   └── vite.svg
