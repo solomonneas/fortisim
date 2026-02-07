@@ -33,8 +33,15 @@ export function PolicyTablePage() {
   const conflicts = useMemo(() => detectConflicts(policies), [policies]);
   const unusedPolicies = useMemo(() => findUnusedPolicies(policies), [policies]);
   const conflictMap = useMemo(() => {
-    const map = new Map<number, PolicyConflict>();
-    for (const c of conflicts) map.set(c.policyId, c);
+    const map = new Map<number, PolicyConflict[]>();
+    for (const c of conflicts) {
+      const existing = map.get(c.policyId);
+      if (existing) {
+        existing.push(c);
+      } else {
+        map.set(c.policyId, [c]);
+      }
+    }
     return map;
   }, [conflicts]);
 
@@ -178,7 +185,7 @@ export function PolicyTablePage() {
             <AlertTriangle className="w-3.5 h-3.5" />
             Policy Analysis
           </h3>
-          <div className="grid grid-cols-3 gap-3 text-[11px]">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px]">
             <div className="bg-surface rounded p-2 border border-border-subtle">
               <div className="text-red font-bold text-lg">
                 {conflicts.filter((c) => c.type === 'conflict').length}
@@ -243,7 +250,7 @@ export function PolicyTablePage() {
               {sorted.map((policy) => {
                 const isImplicit = policy.policyid === 0;
                 const isExpanded = expandedRow === policy.policyid;
-                const conflict = conflictMap.get(policy.policyid);
+                const policyConflicts = conflictMap.get(policy.policyid);
                 const isDisabled = policy.status === 'disable';
                 const hitPct = (policy.hit_count / maxHits) * 100;
 
@@ -254,7 +261,7 @@ export function PolicyTablePage() {
                     isImplicit={isImplicit}
                     isExpanded={isExpanded}
                     isDisabled={isDisabled}
-                    conflict={conflict}
+                    conflicts={policyConflicts}
                     hitPct={hitPct}
                     onToggleExpand={() =>
                       setExpandedRow(isExpanded ? null : policy.policyid)
@@ -277,7 +284,7 @@ function PolicyRow({
   isImplicit,
   isExpanded,
   isDisabled,
-  conflict,
+  conflicts,
   hitPct,
   onToggleExpand,
   onToggleStatus,
@@ -286,7 +293,7 @@ function PolicyRow({
   isImplicit: boolean;
   isExpanded: boolean;
   isDisabled: boolean;
-  conflict?: PolicyConflict;
+  conflicts?: PolicyConflict[];
   hitPct: number;
   onToggleExpand: () => void;
   onToggleStatus: () => void;
@@ -297,21 +304,36 @@ function PolicyRow({
     ? 'border-b border-border-subtle opacity-50'
     : 'border-b border-border-subtle hover:bg-card/30';
 
+  // Use the highest-severity conflict for the row indicator
+  const primaryConflict = conflicts?.[0];
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onToggleExpand();
+    }
+  }
+
   return (
     <>
       <tr
         className={`${rowBase} cursor-pointer transition-colors`}
         onClick={onToggleExpand}
+        onKeyDown={handleKeyDown}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        aria-label={`Policy ${policy.policyid}: ${policy.name}, action ${policy.action}`}
       >
         {/* ID */}
         <td className="px-2 py-1.5">
           <span className="flex items-center gap-1">
-            {conflict && (
+            {primaryConflict && (
               <AlertTriangle
                 className={`w-3 h-3 flex-shrink-0 ${
-                  conflict.type === 'conflict' ? 'text-red' : 'text-amber'
+                  primaryConflict.type === 'conflict' ? 'text-red' : 'text-amber'
                 }`}
-                title={conflict.description}
+                title={conflicts!.map((c) => c.description).join('; ')}
               />
             )}
             <span className={isImplicit ? 'text-text-muted' : 'text-text-secondary'}>
@@ -429,7 +451,7 @@ function PolicyRow({
       {isExpanded && (
         <tr>
           <td colSpan={13} className="bg-card/50 border-b border-border-subtle">
-            <PolicyDetail policy={policy} conflict={conflict} />
+            <PolicyDetail policy={policy} conflicts={conflicts} />
           </td>
         </tr>
       )}
@@ -439,14 +461,14 @@ function PolicyRow({
 
 function PolicyDetail({
   policy,
-  conflict,
+  conflicts,
 }: {
   policy: FirewallPolicy;
-  conflict?: PolicyConflict;
+  conflicts?: PolicyConflict[];
 }) {
   return (
     <div className="px-4 py-3 animate-fade-in">
-      <div className="grid grid-cols-4 gap-4 text-[11px]">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-[11px]">
         <DetailBlock label="Source Addresses">
           {policy.srcaddr.map((a) => (
             <div key={a.name} className="text-text-secondary">
@@ -494,15 +516,20 @@ function PolicyDetail({
         UUID: {policy.uuid}
       </div>
 
-      {conflict && (
-        <div
-          className={`mt-2 px-2 py-1 rounded text-[10px] border ${
-            conflict.type === 'conflict'
-              ? 'border-red/20 bg-red/5 text-red'
-              : 'border-amber/20 bg-amber/5 text-amber'
-          }`}
-        >
-          ⚠ {conflict.description}
+      {conflicts && conflicts.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {conflicts.map((conflict) => (
+            <div
+              key={`${conflict.policyId}-${conflict.conflictsWith}`}
+              className={`px-2 py-1 rounded text-[10px] border ${
+                conflict.type === 'conflict'
+                  ? 'border-red/20 bg-red/5 text-red'
+                  : 'border-amber/20 bg-amber/5 text-amber'
+              }`}
+            >
+              ⚠ {conflict.description}
+            </div>
+          ))}
         </div>
       )}
     </div>

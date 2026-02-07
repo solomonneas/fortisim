@@ -10,8 +10,33 @@ import type {
 } from '../types';
 import { mockAddresses } from '../data/mockAddresses';
 import { mockServices, serviceMatchesPort } from '../data/mockServices';
-import { mockInterfaces } from '../data/mockInterfaces';
+import { mockInterfaces, mockZones } from '../data/mockInterfaces';
 import { mockVIPRules } from '../data/mockNATRules';
+
+/**
+ * Canonical interface→zone mapping built from mockInterfaces data.
+ * Single source of truth for resolving between interfaces and zones.
+ */
+const interfaceToZone = new Map<string, string>(
+  mockInterfaces.map((i) => [i.name, i.zone])
+);
+
+/** Reverse mapping: zone→interface names */
+const zoneToInterfaces = new Map<string, string[]>(
+  mockZones.map((z) => [z.name, z.interfaces.map((i) => i.name)])
+);
+
+/**
+ * Resolve a name (interface or zone) to its canonical zone name.
+ * Returns the zone if it's already a zone name, or looks up the interface's zone.
+ */
+function resolveZone(name: string): string | null {
+  if (name === 'any') return 'any';
+  // Already a zone name?
+  if (zoneToInterfaces.has(name)) return name;
+  // Interface name → look up its zone
+  return interfaceToZone.get(name) ?? null;
+}
 
 /**
  * Parse a subnet mask like "255.255.255.0" into CIDR prefix length
@@ -79,26 +104,30 @@ function ipMatchesAddress(ip: string, addrName: string): boolean {
 }
 
 /**
- * Check if a zone name matches a policy's interface list
+ * Check if a packet's zone/interface matches a policy's interface list.
+ * Both the packet field and policy field can be either interface names or zone names.
+ * We resolve both sides to canonical zone names and compare.
  */
 function zoneMatchesInterface(
   zone: string,
   policyInterfaces: { name: string }[]
 ): boolean {
-  // "any" matches everything
+  // "any" on either side matches everything
+  if (zone === 'any') return true;
   if (policyInterfaces.some((i) => i.name === 'any')) return true;
 
-  // Direct interface name match
-  if (policyInterfaces.some((i) => i.name === zone)) return true;
+  // Resolve the packet's zone/interface to a canonical zone name
+  const packetZone = resolveZone(zone);
 
-  // Zone-to-interface mapping: check if zone contains any of the policy interfaces
-  const iface = mockInterfaces.find((i) => i.name === zone);
-  if (iface && policyInterfaces.some((pi) => pi.name === iface.zone)) return true;
-
-  // Reverse: check if any policy interface belongs to the given zone
   for (const pi of policyInterfaces) {
-    const pIface = mockInterfaces.find((i) => i.name === pi.name);
-    if (pIface && pIface.zone === zone) return true;
+    // Resolve each policy interface to its canonical zone name
+    const policyZone = resolveZone(pi.name);
+
+    // If both resolve to the same zone, it's a match
+    if (packetZone && policyZone && packetZone === policyZone) return true;
+
+    // Direct name match as fallback (handles edge cases)
+    if (pi.name === zone) return true;
   }
 
   return false;

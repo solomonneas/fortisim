@@ -196,7 +196,7 @@ export function TrafficSimPage() {
         <h1 className="text-lg font-bold text-text">Traffic Flow Simulator</h1>
       </div>
 
-      <div className="grid grid-cols-[1fr_320px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
         {/* Left: Simulator */}
         <div className="space-y-4">
           {/* Packet Input Form */}

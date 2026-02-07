@@ -13,6 +13,36 @@ const zoneLayout: Record<string, { x: number; y: number }> = {
   VPN: { x: 600, y: 440 },
 };
 
+/**
+ * Build interface→zone lookup from mockInterfaces data.
+ * Used to resolve interface names to zone names in policies.
+ */
+const interfaceToZone = new Map<string, string>(
+  mockInterfaces.map((i) => [i.name, i.zone])
+);
+
+/** All known zone names */
+const allZoneNames = mockZones.map((z) => z.name);
+
+/**
+ * Resolve an interface/zone name to its canonical zone name.
+ * - "any" → returns all zone names (matches everything)
+ * - Known zone name → returns [zoneName]
+ * - Known interface → returns [its zone]
+ * - Unknown → returns [name] with console warning
+ */
+function resolveToZones(name: string): string[] {
+  if (name === 'any') return allZoneNames;
+  // Already a zone name?
+  if (allZoneNames.includes(name)) return [name];
+  // Interface name → look up its zone
+  const zone = interfaceToZone.get(name);
+  if (zone) return [zone];
+  // Unknown — log and return as-is so it doesn't silently disappear
+  console.warn(`[TopologyPage] Unknown interface/zone: "${name}" — no mapping found`);
+  return [name];
+}
+
 /** Derive inter-zone traffic flows from policy table */
 interface ZoneFlow {
   from: string;
@@ -29,36 +59,38 @@ function deriveZoneFlows(policies: FirewallPolicy[]): ZoneFlow[] {
     if (policy.policyid === 0 || policy.status === 'disable') continue;
 
     for (const srcIntf of policy.srcintf) {
-      const srcIface = mockInterfaces.find((i) => i.name === srcIntf.name);
-      const srcZone = srcIface?.zone || srcIntf.name;
+      const srcZones = resolveToZones(srcIntf.name);
 
       for (const dstIntf of policy.dstintf) {
-        const dstIface = mockInterfaces.find((i) => i.name === dstIntf.name);
-        const dstZone = dstIface?.zone || dstIntf.name;
+        const dstZones = resolveToZones(dstIntf.name);
 
-        if (srcZone === dstZone) continue;
+        for (const srcZone of srcZones) {
+          for (const dstZone of dstZones) {
+            if (srcZone === dstZone) continue;
 
-        const key = `${srcZone}->${dstZone}`;
-        const existing = flowMap.get(key);
+            const key = `${srcZone}->${dstZone}`;
+            const existing = flowMap.get(key);
 
-        if (existing) {
-          existing.policies.push(policy);
-          for (const s of policy.service) {
-            if (!existing.services.includes(s.name)) {
-              existing.services.push(s.name);
+            if (existing) {
+              existing.policies.push(policy);
+              for (const s of policy.service) {
+                if (!existing.services.includes(s.name)) {
+                  existing.services.push(s.name);
+                }
+              }
+              if (existing.action !== policy.action) {
+                existing.action = 'mixed';
+              }
+            } else {
+              flowMap.set(key, {
+                from: srcZone,
+                to: dstZone,
+                action: policy.action,
+                services: policy.service.map((s) => s.name),
+                policies: [policy],
+              });
             }
           }
-          if (existing.action !== policy.action) {
-            existing.action = 'mixed';
-          }
-        } else {
-          flowMap.set(key, {
-            from: srcZone,
-            to: dstZone,
-            action: policy.action,
-            services: policy.service.map((s) => s.name),
-            policies: [policy],
-          });
         }
       }
     }
@@ -83,7 +115,7 @@ export function TopologyPage() {
         <h1 className="text-lg font-bold text-text">Zone Topology</h1>
       </div>
 
-      <div className="grid grid-cols-[1fr_280px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
         {/* SVG Topology Diagram */}
         <div className="bg-surface rounded-lg border border-border-subtle p-2 overflow-hidden">
           <svg viewBox="0 0 800 520" className="w-full h-auto" role="img" aria-label="Network zone topology diagram">
