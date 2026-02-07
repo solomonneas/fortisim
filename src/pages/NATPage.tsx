@@ -1,14 +1,27 @@
-import { ArrowRightLeft, Globe, Server, ArrowRight, Shield } from 'lucide-react';
+import { ArrowRightLeft, Globe, Server, ArrowRight } from 'lucide-react';
 import { mockVIPRules, mockSNATPools } from '../data/mockNATRules';
 import { mockPolicies } from '../data/mockPolicies';
 import { formatCount, formatBytes } from '../utils/formatters';
 
 export function NATPage() {
+  const totalVIPHits = mockVIPRules.reduce((sum, v) => sum + v.hit_count, 0);
+  const totalSNATHits = mockSNATPools.reduce((sum, p) => sum + p.hit_count, 0);
+
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center gap-2 mb-4">
-        <ArrowRightLeft className="w-5 h-5 text-cyan" />
-        <h1 className="text-lg font-bold text-text">NAT Rules</h1>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <ArrowRightLeft className="w-5 h-5 text-cyan" />
+          <h1 className="text-lg font-bold text-text">NAT Rules</h1>
+        </div>
+        <div className="flex items-center gap-3 text-[10px]">
+          <span className="bg-card px-2 py-0.5 rounded text-text-secondary border border-border-subtle">
+            {mockVIPRules.length} VIPs · {formatCount(totalVIPHits)} hits
+          </span>
+          <span className="bg-card px-2 py-0.5 rounded text-text-secondary border border-border-subtle">
+            {mockSNATPools.length} Pools · {formatCount(totalSNATHits)} hits
+          </span>
+        </div>
       </div>
 
       {/* DNAT / VIP Section */}
@@ -25,7 +38,7 @@ export function NATPage() {
             return (
               <div
                 key={vip.uuid}
-                className="bg-surface rounded-lg border border-border-subtle p-3"
+                className="bg-surface rounded-lg border border-border-subtle p-3 hover:border-border transition-colors"
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -41,6 +54,9 @@ export function NATPage() {
                     >
                       {vip.status}
                     </span>
+                    <span className="text-[10px] px-1.5 py-0 rounded border border-border-subtle text-text-muted">
+                      {vip.protocol.toUpperCase()}
+                    </span>
                   </div>
                   <div className="flex items-center gap-3 text-[10px] text-text-muted">
                     <span>Hits: {formatCount(vip.hit_count)}</span>
@@ -53,7 +69,7 @@ export function NATPage() {
                   {/* External Side */}
                   <div className="flex-1 flex items-center justify-end gap-2">
                     <div className="text-right">
-                      <div className="text-[10px] text-text-muted uppercase">
+                      <div className="text-[10px] text-text-muted uppercase tracking-wider">
                         External
                       </div>
                       <div className="font-mono text-xs text-red">
@@ -70,7 +86,10 @@ export function NATPage() {
                   <div className="flex items-center gap-1.5 px-3">
                     <ArrowRight className="w-3 h-3 text-text-muted" />
                     <div className="w-8 h-8 rounded bg-card border border-cyan/20 flex items-center justify-center">
-                      <Shield className="w-4 h-4 text-cyan" />
+                      {/* Shield SVG inline */}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      </svg>
                     </div>
                     <ArrowRight className="w-3 h-3 text-text-muted" />
                   </div>
@@ -79,7 +98,7 @@ export function NATPage() {
                   <div className="flex-1 flex items-center gap-2">
                     <Server className="w-4 h-4 text-green/60 flex-shrink-0" />
                     <div>
-                      <div className="text-[10px] text-text-muted uppercase">
+                      <div className="text-[10px] text-text-muted uppercase tracking-wider">
                         Internal
                       </div>
                       <div className="font-mono text-xs text-green">
@@ -132,7 +151,7 @@ export function NATPage() {
           {mockSNATPools.map((pool) => (
             <div
               key={pool.uuid}
-              className="bg-surface rounded-lg border border-border-subtle p-3"
+              className="bg-surface rounded-lg border border-border-subtle p-3 hover:border-border transition-colors"
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
@@ -154,13 +173,13 @@ export function NATPage() {
                 {/* Internal Side */}
                 <div className="flex-1 flex items-center justify-end gap-2">
                   <div className="text-right">
-                    <div className="text-[10px] text-text-muted uppercase">
+                    <div className="text-[10px] text-text-muted uppercase tracking-wider">
                       Internal Range
                     </div>
                     <div className="font-mono text-xs text-green">
                       {pool.source_startip}
                       {pool.source_startip !== pool.source_endip &&
-                        ` - ${pool.source_endip}`}
+                        ` – ${pool.source_endip}`}
                     </div>
                   </div>
                   <Server className="w-4 h-4 text-green/60 flex-shrink-0" />
@@ -170,7 +189,9 @@ export function NATPage() {
                 <div className="flex items-center gap-1.5 px-3">
                   <ArrowRight className="w-3 h-3 text-text-muted" />
                   <div className="w-8 h-8 rounded bg-card border border-cyan/20 flex items-center justify-center">
-                    <Shield className="w-4 h-4 text-cyan" />
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
                   </div>
                   <ArrowRight className="w-3 h-3 text-text-muted" />
                 </div>
@@ -179,12 +200,12 @@ export function NATPage() {
                 <div className="flex-1 flex items-center gap-2">
                   <Globe className="w-4 h-4 text-red/60 flex-shrink-0" />
                   <div>
-                    <div className="text-[10px] text-text-muted uppercase">
+                    <div className="text-[10px] text-text-muted uppercase tracking-wider">
                       NAT Pool
                     </div>
                     <div className="font-mono text-xs text-amber">
                       {pool.startip}
-                      {pool.startip !== pool.endip && ` - ${pool.endip}`}
+                      {pool.startip !== pool.endip && ` – ${pool.endip}`}
                     </div>
                     <div className="text-[9px] text-text-muted">
                       {pool.associated_interface}

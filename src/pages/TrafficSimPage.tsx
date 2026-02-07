@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Zap,
   Play,
@@ -8,8 +8,9 @@ import {
   X,
   Clock,
   ArrowRightLeft,
+  Loader,
 } from 'lucide-react';
-import type { SimulatedPacket, SimulationResult } from '../types';
+import type { SimulatedPacket, SimulationResult, EvaluationStep } from '../types';
 import { mockPolicies } from '../data/mockPolicies';
 import { mockInterfaces } from '../data/mockInterfaces';
 import { simulatePacket } from '../utils/policyEvaluator';
@@ -101,9 +102,18 @@ export function TrafficSimPage() {
     protocol: 'TCP',
   });
   const [result, setResult] = useState<SimulationResult | null>(null);
+  const [pendingSteps, setPendingSteps] = useState<EvaluationStep[]>([]);
   const [history, setHistory] = useState<SimulationResult[]>([]);
   const [animating, setAnimating] = useState(false);
   const [animStep, setAnimStep] = useState(-1);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clean up interval on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
   const zones = mockInterfaces.map((i) => ({
     name: i.name,
@@ -113,19 +123,25 @@ export function TrafficSimPage() {
   const runSimulation = useCallback(() => {
     if (!isValidIPv4(packet.srcIp) || !isValidIPv4(packet.dstIp)) return;
 
+    // Clear any existing animation
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
     setAnimating(true);
     setAnimStep(0);
     setResult(null);
 
     const simResult = simulatePacket(packet, mockPolicies);
+    // Store steps immediately so they're available during animation
+    setPendingSteps(simResult.steps);
 
-    // Animate through steps
+    // Animate through steps one by one
     let step = 0;
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       step++;
       setAnimStep(step);
       if (step >= simResult.steps.length) {
-        clearInterval(interval);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = null;
         setTimeout(() => {
           setResult(simResult);
           setAnimating(false);
@@ -136,21 +152,42 @@ export function TrafficSimPage() {
   }, [packet]);
 
   function loadPreset(preset: SimulatedPacket) {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = null;
     setPacket(preset);
     setResult(null);
+    setPendingSteps([]);
     setAnimStep(-1);
+    setAnimating(false);
+  }
+
+  function clearSim() {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    setResult(null);
+    setPendingSteps([]);
+    setAnimStep(-1);
+    setAnimating(false);
   }
 
   function replayHistory(sim: SimulationResult) {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = null;
     setPacket(sim.packet);
     setResult(sim);
+    setPendingSteps(sim.steps);
     setAnimStep(sim.steps.length);
+    setAnimating(false);
   }
 
   const srcValid = packet.srcIp === '' || isValidIPv4(packet.srcIp);
   const dstValid = packet.dstIp === '' || isValidIPv4(packet.dstIp);
   const canSimulate =
     isValidIPv4(packet.srcIp) && isValidIPv4(packet.dstIp) && !animating;
+
+  // Use pendingSteps during animation, result.steps after completion
+  const displaySteps = result ? result.steps : pendingSteps;
+  const showEvaluation = (animating || result) && displaySteps.length > 0;
 
   return (
     <div className="animate-fade-in">
@@ -159,7 +196,7 @@ export function TrafficSimPage() {
         <h1 className="text-lg font-bold text-text">Traffic Flow Simulator</h1>
       </div>
 
-      <div className="grid grid-cols-[1fr_320px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
         {/* Left: Simulator */}
         <div className="space-y-4">
           {/* Packet Input Form */}
@@ -179,7 +216,7 @@ export function TrafficSimPage() {
                     setPacket((p) => ({ ...p, srcIp: e.target.value }))
                   }
                   placeholder="10.0.1.100"
-                  className={`w-full bg-card border rounded px-2 py-1 text-xs text-text placeholder:text-text-muted focus:outline-none transition-colors ${
+                  className={`w-full bg-card border rounded px-2 py-1.5 text-xs text-text placeholder:text-text-muted focus:outline-none transition-colors ${
                     srcValid
                       ? 'border-border-subtle focus:border-cyan/40'
                       : 'border-red/40'
@@ -195,7 +232,7 @@ export function TrafficSimPage() {
                   onChange={(e) =>
                     setPacket((p) => ({ ...p, srcZone: e.target.value }))
                   }
-                  className="w-full bg-card border border-border-subtle rounded px-2 py-1 text-xs text-text focus:outline-none focus:border-cyan/40"
+                  className="w-full bg-card border border-border-subtle rounded px-2 py-1.5 text-xs text-text focus:outline-none focus:border-cyan/40"
                 >
                   {zones.map((z) => (
                     <option key={z.name} value={z.name}>
@@ -215,7 +252,7 @@ export function TrafficSimPage() {
                     setPacket((p) => ({ ...p, dstIp: e.target.value }))
                   }
                   placeholder="8.8.8.8"
-                  className={`w-full bg-card border rounded px-2 py-1 text-xs text-text placeholder:text-text-muted focus:outline-none transition-colors ${
+                  className={`w-full bg-card border rounded px-2 py-1.5 text-xs text-text placeholder:text-text-muted focus:outline-none transition-colors ${
                     dstValid
                       ? 'border-border-subtle focus:border-cyan/40'
                       : 'border-red/40'
@@ -231,7 +268,7 @@ export function TrafficSimPage() {
                   onChange={(e) =>
                     setPacket((p) => ({ ...p, dstZone: e.target.value }))
                   }
-                  className="w-full bg-card border border-border-subtle rounded px-2 py-1 text-xs text-text focus:outline-none focus:border-cyan/40"
+                  className="w-full bg-card border border-border-subtle rounded px-2 py-1.5 text-xs text-text focus:outline-none focus:border-cyan/40"
                 >
                   {zones.map((z) => (
                     <option key={z.name} value={z.name}>
@@ -255,7 +292,7 @@ export function TrafficSimPage() {
                   }
                   min={0}
                   max={65535}
-                  className="w-full bg-card border border-border-subtle rounded px-2 py-1 text-xs text-text focus:outline-none focus:border-cyan/40"
+                  className="w-full bg-card border border-border-subtle rounded px-2 py-1.5 text-xs text-text focus:outline-none focus:border-cyan/40"
                 />
               </div>
               <div>
@@ -270,7 +307,7 @@ export function TrafficSimPage() {
                       protocol: e.target.value as 'TCP' | 'UDP' | 'ICMP',
                     }))
                   }
-                  className="w-full bg-card border border-border-subtle rounded px-2 py-1 text-xs text-text focus:outline-none focus:border-cyan/40"
+                  className="w-full bg-card border border-border-subtle rounded px-2 py-1.5 text-xs text-text focus:outline-none focus:border-cyan/40"
                 >
                   <option value="TCP">TCP</option>
                   <option value="UDP">UDP</option>
@@ -280,17 +317,20 @@ export function TrafficSimPage() {
             </div>
 
             {/* Presets */}
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {presets.map((p) => (
-                <button
-                  key={p.label}
-                  onClick={() => loadPreset(p.packet)}
-                  className="text-[10px] px-2 py-0.5 rounded border border-border-subtle text-text-secondary hover:border-cyan/30 hover:text-cyan transition-colors"
-                  title={p.desc}
-                >
-                  {p.label}
-                </button>
-              ))}
+            <div className="mt-3">
+              <div className="text-[10px] text-text-muted mb-1.5">Quick presets:</div>
+              <div className="flex flex-wrap gap-1.5">
+                {presets.map((p) => (
+                  <button
+                    key={p.label}
+                    onClick={() => loadPreset(p.packet)}
+                    className="text-[10px] px-2 py-0.5 rounded border border-border-subtle text-text-secondary hover:border-cyan/30 hover:text-cyan transition-colors"
+                    title={p.desc}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Simulate Button */}
@@ -300,14 +340,15 @@ export function TrafficSimPage() {
                 disabled={!canSimulate}
                 className="flex items-center gap-1.5 bg-cyan/10 text-cyan border border-cyan/20 px-4 py-1.5 rounded text-xs font-medium hover:bg-cyan/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                <Play className="w-3.5 h-3.5" />
-                Simulate
+                {animating ? (
+                  <Loader className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Play className="w-3.5 h-3.5" />
+                )}
+                {animating ? 'Evaluating...' : 'Simulate'}
               </button>
               <button
-                onClick={() => {
-                  setResult(null);
-                  setAnimStep(-1);
-                }}
+                onClick={clearSim}
                 className="flex items-center gap-1.5 text-text-muted border border-border-subtle px-3 py-1.5 rounded text-xs hover:text-text hover:border-text-muted/30 transition-colors"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -317,157 +358,42 @@ export function TrafficSimPage() {
           </div>
 
           {/* Evaluation Log */}
-          {(animating || result) && (
+          {showEvaluation && (
             <div className="bg-surface rounded-lg border border-border-subtle p-4">
               <h2 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">
-                Policy Evaluation — Top to Bottom
+                Policy Evaluation — Top to Bottom (First Match Wins)
               </h2>
               <div className="space-y-1">
-                {(result?.steps || []).map((step, idx) => {
+                {displaySteps.map((step, idx) => {
                   const visible = idx <= animStep;
                   if (!visible) return null;
 
+                  const isCurrentAnimStep = animating && idx === animStep;
+
                   return (
-                    <div
+                    <EvalStepRow
                       key={step.policyId}
-                      className={`flex items-start gap-2 px-2 py-1.5 rounded text-[11px] font-mono transition-all ${
-                        step.matched
-                          ? step.action === 'accept'
-                            ? 'bg-green/8 border border-green/20'
-                            : 'bg-red/8 border border-red/20'
-                          : 'bg-card/30 border border-transparent'
-                      }`}
-                    >
-                      <span className="flex-shrink-0 mt-0.5">
-                        {step.matched ? (
-                          step.action === 'accept' ? (
-                            <Check className="w-3 h-3 text-green" />
-                          ) : (
-                            <X className="w-3 h-3 text-red" />
-                          )
-                        ) : (
-                          <span className="w-3 h-3 block text-text-muted text-center">
-                            ·
-                          </span>
-                        )}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-text-muted w-6 text-right">
-                            #{step.policyId}
-                          </span>
-                          <span
-                            className={
-                              step.matched ? 'text-text font-medium' : 'text-text-muted'
-                            }
-                          >
-                            {step.policyName}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-text-muted mt-0.5">
-                          {Object.entries(step.checks).map(([key, val]) => (
-                            <span key={key} className="mr-2">
-                              <span className="text-text-muted">{key}</span>
-                              <span className={val ? 'text-green' : 'text-red/60'}>
-                                {val ? ' ✓' : ' ✗'}
-                              </span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      {step.matched && (
-                        <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                            step.action === 'accept'
-                              ? 'bg-green/10 text-green'
-                              : 'bg-red/10 text-red'
-                          }`}
-                        >
-                          {step.action?.toUpperCase()}
-                        </span>
-                      )}
-                    </div>
+                      step={step}
+                      isCurrent={isCurrentAnimStep}
+                    />
                   );
                 })}
               </div>
 
-              {/* Final Result */}
-              {result && (
-                <div className="mt-4 space-y-3">
-                  <div
-                    className={`flex items-center justify-between p-3 rounded-lg border ${
-                      result.finalAction === 'ALLOW'
-                        ? 'bg-green/5 border-green/20'
-                        : 'bg-red/5 border-red/20'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold ${
-                          result.finalAction === 'ALLOW'
-                            ? 'bg-green/10 text-green'
-                            : 'bg-red/10 text-red'
-                        }`}
-                      >
-                        {result.finalAction === 'ALLOW' ? '✓' : '✗'}
-                      </div>
-                      <div>
-                        <div
-                          className={`text-sm font-bold ${
-                            result.finalAction === 'ALLOW'
-                              ? 'text-green'
-                              : 'text-red'
-                          }`}
-                        >
-                          {result.finalAction}
-                        </div>
-                        <div className="text-[10px] text-text-muted">
-                          {result.matchedPolicy
-                            ? `Matched Policy ${result.matchedPolicy.policyid}: ${result.matchedPolicy.name}`
-                            : 'No matching policy — implicit deny'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right text-[10px] text-text-muted">
-                      Evaluated {result.steps.length} policies
-                    </div>
-                  </div>
-
-                  {/* NAT Translation */}
-                  {result.natApplied && result.natDetail && (
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-cyan/5 border border-cyan/20">
-                      <ArrowRightLeft className="w-4 h-4 text-cyan flex-shrink-0" />
-                      <div className="text-[11px]">
-                        <div className="text-cyan font-medium mb-1">
-                          {result.natDetail.type} Translation Applied
-                        </div>
-                        <div className="flex items-center gap-2 text-text-secondary">
-                          <span className="font-mono bg-card px-1.5 py-0.5 rounded">
-                            {result.natDetail.type === 'SNAT'
-                              ? result.natDetail.originalSrc
-                              : result.natDetail.originalDst}
-                          </span>
-                          <ArrowRight className="w-3 h-3 text-cyan" />
-                          <span className="font-mono bg-card px-1.5 py-0.5 rounded text-cyan">
-                            {result.natDetail.type === 'SNAT'
-                              ? result.natDetail.translatedSrc
-                              : result.natDetail.translatedDst}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Final Result Card */}
+              {result && <SimResultCard result={result} />}
             </div>
           )}
         </div>
 
         {/* Right: History */}
-        <div className="bg-surface rounded-lg border border-border-subtle p-3">
+        <div className="bg-surface rounded-lg border border-border-subtle p-3 h-fit">
           <h2 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
             Simulation History
+            {history.length > 0 && (
+              <span className="text-text-muted font-normal">({history.length}/10)</span>
+            )}
           </h2>
           {history.length === 0 ? (
             <div className="text-[11px] text-text-muted text-center py-8">
@@ -479,7 +405,7 @@ export function TrafficSimPage() {
             <div className="space-y-1.5">
               {history.map((sim, idx) => (
                 <button
-                  key={idx}
+                  key={`${idx}-${sim.timestamp}`}
                   onClick={() => replayHistory(sim)}
                   className="w-full text-left bg-card/50 hover:bg-card rounded border border-border-subtle p-2 transition-colors"
                 >
@@ -508,12 +434,148 @@ export function TrafficSimPage() {
                       {sim.packet.dstIp}:{sim.packet.dstPort}/{sim.packet.protocol}
                     </span>
                   </div>
+                  {sim.natApplied && (
+                    <div className="text-[9px] text-cyan mt-0.5">
+                      ↔ {sim.natDetail?.type}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Single evaluation step row */
+function EvalStepRow({ step, isCurrent }: { step: EvaluationStep; isCurrent: boolean }) {
+  return (
+    <div
+      className={`flex items-start gap-2 px-2 py-1.5 rounded text-[11px] font-mono transition-all ${
+        step.matched
+          ? step.action === 'accept'
+            ? 'bg-green/10 border border-green/20 animate-pulse-glow'
+            : 'bg-red/10 border border-red/20'
+          : isCurrent
+          ? 'bg-card/60 border border-cyan/10'
+          : 'bg-card/30 border border-transparent'
+      }`}
+    >
+      <span className="flex-shrink-0 mt-0.5">
+        {step.matched ? (
+          step.action === 'accept' ? (
+            <Check className="w-3 h-3 text-green" />
+          ) : (
+            <X className="w-3 h-3 text-red" />
+          )
+        ) : (
+          <span className="w-3 h-3 block text-text-muted text-center">·</span>
+        )}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-text-muted w-8 text-right">#{step.policyId}</span>
+          <span className={step.matched ? 'text-text font-medium' : 'text-text-muted'}>
+            {step.policyName}
+          </span>
+        </div>
+        <div className="text-[10px] text-text-muted mt-0.5 flex flex-wrap gap-x-2">
+          {Object.entries(step.checks).map(([key, val]) => (
+            <span key={key}>
+              <span className="text-text-muted">{key}</span>
+              <span className={val ? 'text-green' : 'text-red/60'}>
+                {val ? ' ✓' : ' ✗'}
+              </span>
+            </span>
+          ))}
+        </div>
+      </div>
+      {step.matched && (
+        <span
+          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+            step.action === 'accept'
+              ? 'bg-green/10 text-green'
+              : 'bg-red/10 text-red'
+          }`}
+        >
+          {step.action?.toUpperCase()}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Final simulation result card with NAT display */
+function SimResultCard({ result }: { result: SimulationResult }) {
+  return (
+    <div className="mt-4 space-y-3">
+      <div
+        className={`flex items-center justify-between p-3 rounded-lg border ${
+          result.finalAction === 'ALLOW'
+            ? 'bg-green/5 border-green/20'
+            : 'bg-red/5 border-red/20'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold ${
+              result.finalAction === 'ALLOW'
+                ? 'bg-green/10 text-green'
+                : 'bg-red/10 text-red'
+            }`}
+          >
+            {result.finalAction === 'ALLOW' ? '✓' : '✗'}
+          </div>
+          <div>
+            <div
+              className={`text-sm font-bold ${
+                result.finalAction === 'ALLOW' ? 'text-green' : 'text-red'
+              }`}
+            >
+              {result.finalAction}
+            </div>
+            <div className="text-[10px] text-text-muted">
+              {result.matchedPolicy
+                ? `Matched Policy ${result.matchedPolicy.policyid}: ${result.matchedPolicy.name}`
+                : 'No matching policy — implicit deny'}
+            </div>
+          </div>
+        </div>
+        <div className="text-right text-[10px] text-text-muted">
+          <div>Evaluated {result.steps.length} policies</div>
+          <div className="text-text-secondary font-mono">
+            {result.packet.srcIp}:{result.packet.srcZone} →{' '}
+            {result.packet.dstIp}:{result.packet.dstPort}/{result.packet.protocol}
+          </div>
+        </div>
+      </div>
+
+      {/* NAT Translation Display */}
+      {result.natApplied && result.natDetail && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-cyan/5 border border-cyan/20">
+          <ArrowRightLeft className="w-4 h-4 text-cyan flex-shrink-0" />
+          <div className="text-[11px]">
+            <div className="text-cyan font-medium mb-1">
+              {result.natDetail.type} Translation Applied
+            </div>
+            <div className="flex items-center gap-2 text-text-secondary">
+              <span className="font-mono bg-card px-1.5 py-0.5 rounded text-text">
+                {result.natDetail.type === 'SNAT'
+                  ? result.natDetail.originalSrc
+                  : result.natDetail.originalDst}
+              </span>
+              <ArrowRight className="w-3 h-3 text-cyan" />
+              <span className="font-mono bg-card px-1.5 py-0.5 rounded text-cyan">
+                {result.natDetail.type === 'SNAT'
+                  ? result.natDetail.translatedSrc
+                  : result.natDetail.translatedDst}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

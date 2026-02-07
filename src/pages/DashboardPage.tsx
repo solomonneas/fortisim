@@ -10,10 +10,20 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { mockPolicies } from '../data/mockPolicies';
-import { mockZones } from '../data/mockInterfaces';
+import { mockZones, mockInterfaces } from '../data/mockInterfaces';
 import { detectConflicts, findUnusedPolicies } from '../utils/conflictDetector';
 import { formatCount, formatBytes } from '../utils/formatters';
 import type { DashboardStats, FirewallPolicy } from '../types';
+
+/**
+ * Build interface→zone lookup from mockInterfaces data (single source of truth).
+ */
+const interfaceToZone = new Map<string, string>(
+  mockInterfaces.map((i) => [i.name, i.zone])
+);
+
+/** Derive zone names from data instead of hardcoding */
+const zoneNames = mockZones.map((z) => z.name);
 
 /**
  * Dashboard landing page — policy health overview and statistics
@@ -45,7 +55,7 @@ export function DashboardPage() {
     };
   }, []);
 
-  // Zone pair matrix data
+  // Zone pair matrix data — derived from data, not hardcoded zone names
   const zonePairs = useMemo(() => {
     const pairs: Array<{
       src: string;
@@ -54,10 +64,8 @@ export function DashboardPage() {
       deny: number;
     }> = [];
 
-    const zones = ['LAN', 'WAN', 'DMZ', 'Guest', 'VPN'];
-
-    for (const src of zones) {
-      for (const dst of zones) {
+    for (const src of zoneNames) {
+      for (const dst of zoneNames) {
         if (src === dst) continue;
 
         // Find policies matching this zone pair
@@ -100,7 +108,7 @@ export function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard
           icon={<Shield className="w-4 h-4" />}
           label="Total Policies"
@@ -135,7 +143,7 @@ export function DashboardPage() {
 
       {/* Alerts Row */}
       {hasIssues && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {stats.conflictCount > 0 && (
             <AlertCard
               icon={<AlertTriangle className="w-4 h-4" />}
@@ -166,7 +174,7 @@ export function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Top Policies */}
         <div className="bg-surface rounded-lg border border-border-subtle p-4">
           <h2 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">
@@ -231,19 +239,19 @@ export function DashboardPage() {
   );
 }
 
-/** Helper: check if interface list matches a zone */
+/**
+ * Helper: check if interface list matches a zone.
+ * Uses data-driven interfaceToZone mapping instead of hardcoded values.
+ */
 function matchesZone(interfaces: { name: string }[], zoneName: string): boolean {
-  // Map zone names to interface names
-  const zoneToInterface: Record<string, string[]> = {
-    LAN: ['lan'],
-    WAN: ['wan1', 'wan2'],
-    DMZ: ['dmz'],
-    Guest: ['guest-wifi'],
-    VPN: ['ssl.root'],
-  };
-
-  const ifaceNames = zoneToInterface[zoneName] || [];
-  return interfaces.some((i) => ifaceNames.includes(i.name) || i.name === 'any');
+  return interfaces.some((i) => {
+    if (i.name === 'any') return true;
+    // Direct zone name match
+    if (i.name === zoneName) return true;
+    // Look up interface's zone from the canonical mapping
+    const zone = interfaceToZone.get(i.name);
+    return zone === zoneName;
+  });
 }
 
 /** Stat card component */

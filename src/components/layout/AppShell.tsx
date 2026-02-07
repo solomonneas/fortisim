@@ -6,23 +6,27 @@ import {
   Zap,
   Network,
   ArrowRightLeft,
+  BookOpen,
   Activity,
   Cpu,
   HardDrive,
   Server,
+  HelpCircle,
 } from 'lucide-react';
 import { mockDeviceInfo } from '../../data/mockInterfaces';
+import { startTour } from '../GuidedTour';
 
 interface AppShellProps {
   children: ReactNode;
 }
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/policies', label: 'Policy Table', icon: Shield },
-  { to: '/traffic-sim', label: 'Traffic Simulator', icon: Zap },
-  { to: '/topology', label: 'Topology', icon: Network },
-  { to: '/nat', label: 'NAT Rules', icon: ArrowRightLeft },
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard, tourId: 'nav-dashboard' },
+  { to: '/policies', label: 'Policy Table', icon: Shield, tourId: 'nav-policies' },
+  { to: '/traffic-sim', label: 'Traffic Simulator', icon: Zap, tourId: 'nav-traffic-sim' },
+  { to: '/topology', label: 'Topology', icon: Network, tourId: 'nav-topology' },
+  { to: '/nat', label: 'NAT Rules', icon: ArrowRightLeft, tourId: 'nav-nat' },
+  { to: '/docs', label: 'Docs', icon: BookOpen, tourId: 'nav-docs' },
 ];
 
 export function AppShell({ children }: AppShellProps) {
@@ -48,7 +52,7 @@ export function AppShell({ children }: AppShellProps) {
 
             {/* Nav Tabs */}
             <nav className="flex items-center gap-1 h-full">
-              {navItems.map(({ to, label, icon: Icon }) => {
+              {navItems.map(({ to, label, icon: Icon, tourId }) => {
                 const isActive =
                   to === '/'
                     ? location.pathname === '/'
@@ -57,6 +61,7 @@ export function AppShell({ children }: AppShellProps) {
                   <NavLink
                     key={to}
                     to={to}
+                    data-tour={tourId}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded transition-colors
                       ${
                         isActive
@@ -71,8 +76,16 @@ export function AppShell({ children }: AppShellProps) {
               })}
             </nav>
 
-            {/* Right: Device Identity */}
+            {/* Right: Tour Button + Device Identity */}
             <div className="ml-auto flex items-center gap-3">
+              <button
+                onClick={startTour}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] text-text-muted hover:text-cyan hover:bg-cyan/5 rounded transition-colors border border-transparent hover:border-cyan/20"
+                title="Take guided tour"
+              >
+                <HelpCircle className="w-3 h-3" />
+                Tour
+              </button>
               <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
                 <div className="w-1.5 h-1.5 rounded-full bg-green animate-pulse" />
                 <span className="text-text-secondary font-medium">
