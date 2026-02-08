@@ -19,7 +19,7 @@ Visualize, analyze, and simulate FortiGate firewall policies — entirely in the
 
 <br />
 
-[Features](#-features) · [Quick Start](#-quick-start) · [How It Works](#-how-it-works) · [Architecture](#-architecture)
+[Features](#features) · [Quick Start](#quick-start) · [How It Works](#how-it-works) · [Architecture](#architecture)
 
 </div>
 
