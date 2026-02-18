@@ -333,7 +333,6 @@ function PolicyRow({
                 className={`w-3 h-3 flex-shrink-0 ${
                   primaryConflict.type === 'conflict' ? 'text-red' : 'text-amber'
                 }`}
-                title={conflicts!.map((c) => c.description).join('; ')}
               />
             )}
             <span className={isImplicit ? 'text-text-muted' : 'text-text-secondary'}>

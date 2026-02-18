@@ -121,20 +121,6 @@ function rangesOverlap(
 }
 
 /**
- * Check if subnet A is a superset of (or equal to) subnet B
- * i.e., everything in B is also in A
- */
-function isSuperset(a: { network: number; mask: number; cidr: number }, b: { network: number; mask: number; cidr: number }): boolean {
-  // A with /0 covers everything
-  if (a.cidr === 0) return true;
-  // If A has a larger prefix (smaller range), it can't be a superset of B
-  if (a.cidr > b.cidr) return false;
-  // Check that B's network falls within A's range
-  const aMask = a.cidr === 0 ? 0 : (0xffffffff << (32 - a.cidr)) >>> 0;
-  return (b.network & aMask) === (a.network & aMask);
-}
-
-/**
  * Check if two policies have overlapping interfaces
  */
 function interfacesOverlap(
